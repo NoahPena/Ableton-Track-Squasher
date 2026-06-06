@@ -7,4 +7,18 @@ export function activate(activation: ActivationContext) {
   console.log(
     `Hello from track-squasher! Your Live Set's tempo is: ${tempo} bpm.`,
   );
+
+  context.ui.registerContextMenuAction(
+    "AudioTrack.ArrangementSelection", // The scope
+    "Process Audio", // The label shown to the user
+    "my-extension.process-audio" // The ID of the command to trigger
+  );
+
+  context.commands.registerCommand("my-extension.process-audio", (arg) => {
+    squashAudio(arg);
+  });
+}
+
+function squashAudio(arg: unknown) {
+  console.log("Squashing audio with argument:", arg);
 }
