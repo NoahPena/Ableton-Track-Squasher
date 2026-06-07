@@ -13,12 +13,15 @@
     "package": "npm run build && extensions-cli package"
   },
   "dependencies": {
-    "@ableton-extensions/sdk": "file:./vendor/ableton-extensions-sdk-1.0.0-beta.0.tgz"
+    "@ableton-extensions/sdk": "file:./vendor/ableton-extensions-sdk-1.0.0-beta.0.tgz",
+    "fluent-ffmpeg": "^2.1.3"
   },
   "devDependencies": {
     "@ableton-extensions/cli": "file:./vendor/ableton-extensions-cli-1.0.0-beta.0.tgz",
+    "@types/fluent-ffmpeg": "^2.1.28",
     "@types/node": "^24.1.0",
     "esbuild": "0.28.0",
     "tsx": "^4.19.0",
-    "typescript": "^5.9.3"  }
+    "typescript": "^5.9.3"
+  }
 }
