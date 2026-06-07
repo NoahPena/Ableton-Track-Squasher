@@ -1,7 +1,12 @@
 import { ApiVersion, ArrangementSelection, AudioTrack, DataModelObject, ExtensionContext, Handle, initialize, MidiTrack, type ActivationContext } from "@ableton-extensions/sdk";
+import path from "path";
 
-import Ffmpeg, {} from "fluent-ffmpeg";
-// const ffmpeg = require("fluent-ffmpeg");
+const ffmpeg = require("fluent-ffmpeg");
+const ffmpegPath = require('ffmpeg-static');
+
+
+console.log(`Using ffmpeg from path: ${ffmpegPath}`);
+ffmpeg.setFfmpegPath(ffmpegPath);
 
 const apiVersion: ApiVersion = "1.0.0";
 
@@ -32,8 +37,9 @@ export function activate(activation: ActivationContext) {
             const obj = context.getObjectFromHandle(handle, DataModelObject);
 
             if (obj instanceof AudioTrack) {
-                const promise = processAudioTrack(context, obj, startTime, endTime);
-                promises.push(promise);
+                await processAudioTrack(context, obj, startTime, endTime);
+                // const promise = processAudioTrack(context, obj, startTime, endTime);
+                // promises.push(promise);
             } else if (obj instanceof MidiTrack) {
                 processMidiTrack(context, obj, startTime, endTime);
             } else {
@@ -41,15 +47,15 @@ export function activate(activation: ActivationContext) {
             }
         }
 
-        const results = await Promise.allSettled(promises);
+        // const results = await Promise.allSettled(promises);
 
-        results.forEach(result => {
-            if (result.status === "fulfilled") {
-                filesProcessed.push(result.value);
-            } else {
-                console.error("Error processing track:", result.reason);
-            }
-        });
+        // results.forEach(result => {
+        //     if (result.status === "fulfilled") {
+        //         filesProcessed.push(result.value);
+        //     } else {
+        //         console.error("Error processing track:", result.reason);
+        //     }
+        // });
 
         const timestamp = Date.now();
 
@@ -63,11 +69,11 @@ export function activate(activation: ActivationContext) {
     });
 }
 
-function processAudioTrack(context: ExtensionContext<typeof apiVersion>, track: AudioTrack<typeof apiVersion>, startTime: number, endTime: number): Promise<string> {
+async function processAudioTrack(context: ExtensionContext<typeof apiVersion>, track: AudioTrack<typeof apiVersion>, startTime: number, endTime: number): Promise<string> {
     console.log(`Processing audio track: ${track.name} from ${startTime} to ${endTime}`);
     // Here you would add your audio processing logic, such as applying effects or modifying the clip.
 
-    const filePath = context.resources.renderPreFxAudio(track, startTime, endTime);
+    const filePath = await context.resources.renderPreFxAudio(track, startTime, endTime);
 
     return filePath;
 }
@@ -78,7 +84,7 @@ function processMidiTrack(context: ExtensionContext<typeof apiVersion>, track: M
 }
 
 function mergeAudioFiles(filePaths: string[], outputPath: string) {
-    let ffmpegObj = Ffmpeg();
+    let ffmpegObj = ffmpeg();
     
     for (const filePath of filePaths) {
         ffmpegObj.input(filePath);
@@ -96,7 +102,7 @@ function mergeAudioFiles(filePaths: string[], outputPath: string) {
         console.log(`Merged audio saved to: ${outputPath}`);
     });
 
-    ffmpegObj.on('error', (err) => {
+    ffmpegObj.on('error', (err: any) => {
         console.error('Error merging audio files:', err);
     });
 
