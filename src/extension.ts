@@ -1,9 +1,24 @@
 import { ApiVersion, ArrangementSelection, AudioTrack, DataModelObject, ExtensionContext, Handle, initialize, MidiTrack, type ActivationContext } from "@ableton-extensions/sdk";
-import path from "path";
-
+const os = require('os');
+// Yea yea fluent-ffmpeg is depecrated, but it works
 const ffmpeg = require("fluent-ffmpeg");
 const ffmpegPath = require('ffmpeg-static');
+// let ffmpegPath = __dirname;
 
+// if (os.platform() === "win32") {
+//     ffmpegPath += "/../ffmpeg_binaries/ffmpeg.exe";
+// } else if (os.platform() === "darwin" && os.arch() === "arm64") {
+//     ffmpegPath += "/../ffmpeg_binaries/ffmpeg_macos_arm64";
+// } else if (os.platform() === "darwin") {
+//     ffmpegPath += "/../ffmpeg_binaries/ffmpeg_macos_x64";
+// } else {
+//     console.error("Unsupported platform or architecture");
+//     ffmpegPath = ""; // Set to empty string to avoid errors, but this will cause ffmpeg to fail when trying to run
+// }
+
+// tempDirectory doesn't seem to work when testing so we'll just
+// use the current directory as the tempDirectory when debugging
+const debugOutputDirectory = __dirname;
 
 console.log(`Using ffmpeg from path: ${ffmpegPath}`);
 ffmpeg.setFfmpegPath(ffmpegPath);
@@ -12,11 +27,6 @@ const apiVersion: ApiVersion = "1.0.0";
 
 export function activate(activation: ActivationContext) {
     const context = initialize(activation, apiVersion);
-
-    const { tempo } = context.application.song;
-    console.log(
-        `Hello from track-squasher! Your Live Set's tempo is: ${tempo} bpm.`,
-    );
 
     context.ui.registerContextMenuAction(
         "AudioTrack.ArrangementSelection", // The scope
@@ -28,62 +38,61 @@ export function activate(activation: ActivationContext) {
         const selection = arg as ArrangementSelection;
         const startTime = selection.time_selection_start;
         const endTime = selection.time_selection_end;
+        const duration = endTime - startTime;
+        const outputDirectory = context.environment.tempDirectory ?? debugOutputDirectory;
 
         let filesProcessed: string[] = [];
-        let promises: Promise<string>[] = [];
 
+        // Go through and create audio files for each selected track
         for (const lane of selection.selected_lanes) {
             const handle: Handle = { id: lane.id};
             const obj = context.getObjectFromHandle(handle, DataModelObject);
 
             if (obj instanceof AudioTrack) {
-                await processAudioTrack(context, obj, startTime, endTime);
-                // const promise = processAudioTrack(context, obj, startTime, endTime);
-                // promises.push(promise);
+                filesProcessed.push(await processAudioTrack(context, obj, startTime, endTime));
             } else if (obj instanceof MidiTrack) {
                 processMidiTrack(context, obj, startTime, endTime);
             } else {
-                console.log(`Selected lane is not an audio or MIDI track: ${obj}`);
+                console.log(`Selected lane is not an audio or MIDI track, but instead some secret 3rd thing...: ${obj}`);
             }
         }
 
-        // const results = await Promise.allSettled(promises);
+        console.log("Number of audio files processed:", filesProcessed.length);
 
-        // results.forEach(result => {
-        //     if (result.status === "fulfilled") {
-        //         filesProcessed.push(result.value);
-        //     } else {
-        //         console.error("Error processing track:", result.reason);
-        //     }
-        // });
-
+        // Need a unique name for each file so timestamp is always a safe bet
         const timestamp = Date.now();
-
-        const outputPath = context.environment.tempDirectory + `/squashed_audio_${timestamp}.wav`;
+        const outputPath = outputDirectory + `/merged_audio_${timestamp}.wav`;
 
         mergeAudioFiles(filesProcessed, outputPath);
 
-        
-        
-        squashAudio(arg);
+        createNewTrackWithAudio(context, outputPath, startTime, duration);
     });
 }
 
 async function processAudioTrack(context: ExtensionContext<typeof apiVersion>, track: AudioTrack<typeof apiVersion>, startTime: number, endTime: number): Promise<string> {
+    
     console.log(`Processing audio track: ${track.name} from ${startTime} to ${endTime}`);
-    // Here you would add your audio processing logic, such as applying effects or modifying the clip.
 
+    // Currently only rendering PreFX Audio because the Ableton Extensions SDK doesn't allow for
+    // rendering PostFX Audio. If it gets added in the future, then we'll show an dialogBox
+    // to ask the user if they want to render PreFX or PostFX audio.
     const filePath = await context.resources.renderPreFxAudio(track, startTime, endTime);
 
     return filePath;
 }
 
 function processMidiTrack(context: ExtensionContext<typeof apiVersion>, track: MidiTrack<typeof apiVersion>, startTime: number, endTime: number) {
+    
+    // The Ableton Extensions SDK doesn't currently allow for rendering MIDI tracks to audio, so we'll just log the MIDI track names for now. 
+    // If MIDI rendering gets added in the future, then we can implement that here.
     console.log(`Processing MIDI track: ${track.name} from ${startTime} to ${endTime}`);
-    // Here you would add your MIDI processing logic, such as quantizing notes or changing velocities.
 }
 
 function mergeAudioFiles(filePaths: string[], outputPath: string) {
+    
+    // I tried to see if there was a way to merge audio files
+    // without downloading ffmpeg, but I couldn't get any of the
+    // libraries to work so ffmpeg it is!
     let ffmpegObj = ffmpeg();
     
     for (const filePath of filePaths) {
@@ -109,6 +118,18 @@ function mergeAudioFiles(filePaths: string[], outputPath: string) {
     ffmpegObj.run();
 }
 
-function squashAudio(arg: unknown) {
-    console.log("Squashing audio with argument:", arg);
+async function createNewTrackWithAudio(context: ExtensionContext<typeof apiVersion>, audioFilePath: string, startTime: number, duration: number) {
+
+    console.log(`Creating new track with audio file: ${audioFilePath}`);
+
+    await context.application.song.createAudioTrack().then((newTrack) => {
+        console.log(`Created new track: ${newTrack.name}`);
+        newTrack.createAudioClip({
+            filePath: audioFilePath,
+            startTime: startTime,
+            duration: duration
+        });
+    }).catch((error) => {
+        console.error('Error creating new track:', error);
+    });
 }
