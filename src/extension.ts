@@ -105,7 +105,7 @@ function mergeAudioFiles(filePaths: string[], outputPath: string) {
         for (let j = 0; j < numSamples; j++)
         {
             const byteOffset = headers[i].dataOffset + j * bytesPerSample;
-            mixed[j] += readSample(view, byteOffset, headers[i].bitDepth);
+            mixed[j] += readSample(view, byteOffset, headers[i].bitDepth, headers[0].areSamplesFloat);
         }
     }
 
@@ -117,6 +117,7 @@ function mergeAudioFiles(filePaths: string[], outputPath: string) {
     const maxVal = (1 << (headers[0].bitDepth - 1)) - 1;
     const minVal = (-maxVal - 1);
 
+    let scale = 1;
     let peak = 0;
     for (let i = 0; i < totalSamples; i++) {
         const abs = Math.abs(mixed[i]);
@@ -126,8 +127,16 @@ function mergeAudioFiles(filePaths: string[], outputPath: string) {
         }
     }
 
-    const needToNormalize = peak > maxVal;
-    const scale = needToNormalize ? maxVal / peak : 1;
+    if (headers[0].areSamplesFloat)
+    {
+        if (peak > 1.0) {
+            scale = 1.0 / peak;
+        }
+    } else {
+        if (peak > maxVal) {
+            scale = maxVal / peak;
+        }
+    }
 
     // Will all that, we're ready to create a new buffer for the .wav file
     const outputDataBytes = totalSamples * bytesPerSample;
@@ -141,15 +150,23 @@ function mergeAudioFiles(filePaths: string[], outputPath: string) {
         sampleRate: headers[0].sampleRate,
         bitsPerSample: headers[0].bitDepth,
         dataSize: outputDataBytes,
+        areSamplesFloat: headers[0].areSamplesFloat,
     });
 
     // Now that the header is in, we need to write each sample to the buffer, but also
     // taking into account if we need to normalize the samples. If we do, then we'll apply 
     // our scale factor, otherwise the scale factor will just be 1
-    for (let i = 0; i < totalSamples; i++) {
-        const sample = Math.round(mixed[i] * scale);
-        const clamped = Math.max(minVal, Math.min(maxVal, sample));
-        writeSample(out, 44 + i * bytesPerSample, clamped, headers[0].bitDepth);
+    if (headers[0].areSamplesFloat) {
+        for (let i = 0; i < totalSamples; i++) {
+            const sample = Math.max(-1.0, Math.min(1.0, mixed[i] * scale));
+            out.setFloat32(44 + i * bytesPerSample, sample, true);
+        }
+    } else {
+        for (let i = 0; i < totalSamples; i++) {
+            const sample = Math.round(mixed[i] * scale);
+            const clamped = Math.max(minVal, Math.min(maxVal, sample));
+            writeSample(out, 44 + i * bytesPerSample, clamped, headers[0].bitDepth);
+        }
     }
     
     // Ok buffer is all written so now we can actually create the file from the buffer

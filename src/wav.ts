@@ -7,6 +7,7 @@ interface WavHeader {
     bitDepth: number;
     dataOffset: number;
     dataSize: number;
+    areSamplesFloat: boolean;
 }
 
 export function parseWavHeader(buffer: ArrayBuffer): WavHeader {
@@ -31,6 +32,7 @@ export function parseWavHeader(buffer: ArrayBuffer): WavHeader {
     let bitDepth = 0;
     let dataOffset = -1;
     let dataSize = 0;
+    let areSamplesFloat = false;
 
     while (offset < buffer.byteLength - 8) {
         const chunkId = readTag(offset);
@@ -39,8 +41,18 @@ export function parseWavHeader(buffer: ArrayBuffer): WavHeader {
         if (chunkId === "fmt ") {
             // audioFormat at offset+8 (1 = PCM — we only support PCM)
             const audioFormat = view.getUint16(offset + 8, true);
-            if (audioFormat !== 1) {
-                throw new Error(`Unsupported WAV audio format: ${audioFormat} (only PCM=1 is supported).`);
+
+            switch (audioFormat) {
+                case 1:
+                    areSamplesFloat = false;
+                    break;
+
+                case 3:
+                    areSamplesFloat = true;
+                    break;
+
+                default:
+                    throw new Error(`Unsupported WAV audio format: ${audioFormat}`);
             }
 
             numChannels = view.getUint16(offset + 10, true);
@@ -62,10 +74,15 @@ export function parseWavHeader(buffer: ArrayBuffer): WavHeader {
 
     if (dataOffset === -1) throw new Error("No 'data' chunk found in WAV file.");
 
-    return { numChannels, sampleRate, bitDepth, dataOffset, dataSize };
+    return { numChannels, sampleRate, bitDepth, dataOffset, dataSize, areSamplesFloat };
 }
 
-export function readSample(view: DataView, byteOffset: number, bitsPerSample: number): number {
+export function readSample(view: DataView, byteOffset: number, bitsPerSample: number, isSampleFloat: boolean): number {
+
+    if (isSampleFloat) {
+        return view.getFloat32(byteOffset, true);
+    }
+
     switch (bitsPerSample) {
         case 16:
             return view.getInt16(byteOffset, true);
@@ -104,9 +121,10 @@ export function writeSample(view: DataView, byteOffset: number, sample: number, 
     }
 }
 
-export function writeWavHeader(view: DataView, opts: { numChannels: number; sampleRate: number; bitsPerSample: number; dataSize: number}) {
+export function writeWavHeader(view: DataView, opts: { numChannels: number; sampleRate: number; bitsPerSample: number; dataSize: number, areSamplesFloat: boolean}) {
 
-    const { numChannels, sampleRate, bitsPerSample, dataSize } = opts;
+    const { numChannels, sampleRate, bitsPerSample, dataSize, areSamplesFloat } = opts;
+    const audioFormat = areSamplesFloat ? 3 : 1;
     const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
     const blockAlign = numChannels * (bitsPerSample / 8);
     const encoder = new TextEncoder();
@@ -119,7 +137,7 @@ export function writeWavHeader(view: DataView, opts: { numChannels: number; samp
     write(8,  "WAVE");
     write(12, "fmt ");
     view.setUint32(16, 16, true);              // PCM fmt chunk size
-    view.setUint16(20, 1, true);               // PCM audio format
+    view.setUint16(20, audioFormat, true);               // PCM audio format
     view.setUint16(22, numChannels, true);
     view.setUint32(24, sampleRate, true);
     view.setUint32(28, byteRate, true);
