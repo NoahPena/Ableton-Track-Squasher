@@ -212,6 +212,7 @@ async function muteOtherTrackSelections(context: ExtensionContext<"1.0.0">, sele
             });
         } else if (obj instanceof MidiTrack) {
             // Midi Tracks aren't supported yet so just skip
+            continue;
         } else {
             console.log(`Selected lane is not an audio or MIDI track, but instead some secret 3rd thing...: ${obj}`);
         }
