@@ -13,6 +13,8 @@ Audio Merger is an Ableton Live Extension that can merge all audio within an Arr
 
 Audio Merger takes an arrangement selection and merges(mixes) the audio into a single .wav file. This .wav file is then placed onto a new track, and the arrangement selection is then muted.
 
+This is functionally the same as doing an export of the selected tracks or resampling the selected tracks, but in a quicker way.
+
 ## Limitations
 
 There are a couple limitations due to limitations with the Ableton Extension SDK. Namely:
